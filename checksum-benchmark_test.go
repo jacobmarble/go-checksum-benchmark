@@ -2,487 +2,217 @@ package checksumbenchmark
 
 import (
 	"crypto/md5"
-	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/binary"
+	"fmt"
 	"hash"
 	"hash/adler32"
 	"hash/crc32"
 	"hash/crc64"
 	"hash/fnv"
+	"math/rand"
+	"regexp"
+	"strconv"
 	"testing"
 
+	xxhashoneofone "github.com/OneOfOne/xxhash"
+	xxhashcespare "github.com/cespare/xxhash/v2"
+	xxhashpierrec32 "github.com/pierrec/xxHash/xxHash32"
+	xxhashpierrec64 "github.com/pierrec/xxHash/xxHash64"
+	"github.com/zeebo/xxh3"
 	"golang.org/x/crypto/md4"
 	"golang.org/x/crypto/sha3"
 )
 
-func createRandomSlize(size int) []byte {
-	s := make([]byte, size, size)
-	rand.Read(s)
-	return s
-}
-
-// Test against this.
-var fodder100MB = createRandomSlize(100 * 1024 * 1024)
-var fodder1MB = createRandomSlize(1024 * 1024)
-var fodder1KB = createRandomSlize(1024)
-var fodder64B = createRandomSlize(64)
-var fodder24B = createRandomSlize(24)
-
-func checksumTest(b *testing.B, h hash.Hash, fodder []byte) {
-	for i := 0; i < b.N; i++ {
-		h.Write(fodder)
-		h.Sum(nil)
+func BenchmarkChecksums(b *testing.B) {
+	for _, size := range []string{"8B", "16B", "32B", "1KB", "16KB", "128KB", "1MB", "16MB"} {
+		fodder := generateRandomBytes(b, size)
+		for _, hi := range hashImplementations {
+			h := hi.hashNewFunc()
+			b.Run(fmt.Sprintf("%s-%s", hi.hashName, size), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					h.Write(fodder)
+					h.Sum(nil)
+					h.Reset()
+				}
+			})
+		}
 	}
 }
 
-// 100 MB benchmarks
-
-func BenchmarkMD4_100MB(b *testing.B) {
-	checksumTest(b, md4.New(), fodder100MB)
-}
-
-func BenchmarkMD5_100MB(b *testing.B) {
-	checksumTest(b, md5.New(), fodder100MB)
-}
-
-func BenchmarkSHA1_100MB(b *testing.B) {
-	checksumTest(b, sha1.New(), fodder100MB)
-}
-
-func BenchmarkSHA224_100MB(b *testing.B) {
-	checksumTest(b, sha256.New224(), fodder100MB)
-}
-
-func BenchmarkSHA256_100MB(b *testing.B) {
-	checksumTest(b, sha256.New(), fodder100MB)
-}
-
-func BenchmarkSHA384_100MB(b *testing.B) {
-	checksumTest(b, sha512.New384(), fodder100MB)
-}
-
-func BenchmarkSHA512_100MB(b *testing.B) {
-	checksumTest(b, sha512.New(), fodder100MB)
-}
-
-func BenchmarkSHA3_224_100MB(b *testing.B) {
-	checksumTest(b, sha3.New224(), fodder100MB)
-}
-
-func BenchmarkSHA3_256_100MB(b *testing.B) {
-	checksumTest(b, sha3.New256(), fodder100MB)
-}
-
-func BenchmarkSHA3_384_100MB(b *testing.B) {
-	checksumTest(b, sha3.New384(), fodder100MB)
-}
-
-func BenchmarkSHA3_512_100MB(b *testing.B) {
-	checksumTest(b, sha3.New512(), fodder100MB)
-}
-
-func BenchmarkSHA512_224_100MB(b *testing.B) {
-	checksumTest(b, sha512.New512_224(), fodder100MB)
-}
-
-func BenchmarkSHA512_256_100MB(b *testing.B) {
-	checksumTest(b, sha512.New512_256(), fodder100MB)
-}
-
-func BenchmarkAdler32_100MB(b *testing.B) {
-	checksumTest(b, adler32.New(), fodder100MB)
-}
-
-func BenchmarkCRC32IEEE_100MB(b *testing.B) {
-	checksumTest(b, crc32.NewIEEE(), fodder100MB)
-}
-
-func BenchmarkCRC32Castagnoli_100MB(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Castagnoli)), fodder100MB)
-}
-
-func BenchmarkCRC32Koopman_100MB(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Koopman)), fodder100MB)
-}
-
-func BenchmarkCRC64_100MB(b *testing.B) {
-	checksumTest(b, crc64.New(crc64.MakeTable(crc64.ISO)), fodder100MB)
-}
-
-func BenchmarkFNV32_100MB(b *testing.B) {
-	checksumTest(b, fnv.New32(), fodder100MB)
-}
-
-func BenchmarkFNV32a_100MB(b *testing.B) {
-	checksumTest(b, fnv.New32a(), fodder100MB)
-}
-
-func BenchmarkFNV64_100MB(b *testing.B) {
-	checksumTest(b, fnv.New64(), fodder100MB)
-}
-
-func BenchmarkFNV64a_100MB(b *testing.B) {
-	checksumTest(b, fnv.New64a(), fodder100MB)
-}
-
-// 1 MB benchmarks
-
-func BenchmarkMD4_1MB(b *testing.B) {
-	checksumTest(b, md4.New(), fodder1MB)
-}
-
-func BenchmarkMD5_1MB(b *testing.B) {
-	checksumTest(b, md5.New(), fodder1MB)
-}
-
-func BenchmarkSHA1_1MB(b *testing.B) {
-	checksumTest(b, sha1.New(), fodder1MB)
-}
-
-func BenchmarkSHA224_1MB(b *testing.B) {
-	checksumTest(b, sha256.New224(), fodder1MB)
-}
-
-func BenchmarkSHA256_1MB(b *testing.B) {
-	checksumTest(b, sha256.New(), fodder1MB)
-}
-
-func BenchmarkSHA384_1MB(b *testing.B) {
-	checksumTest(b, sha512.New384(), fodder1MB)
-}
-
-func BenchmarkSHA512_1MB(b *testing.B) {
-	checksumTest(b, sha512.New(), fodder1MB)
-}
-
-func BenchmarkSHA3_224_1MB(b *testing.B) {
-	checksumTest(b, sha3.New224(), fodder1MB)
-}
-
-func BenchmarkSHA3_256_1MB(b *testing.B) {
-	checksumTest(b, sha3.New256(), fodder1MB)
-}
-
-func BenchmarkSHA3_384_1MB(b *testing.B) {
-	checksumTest(b, sha3.New384(), fodder1MB)
-}
-
-func BenchmarkSHA3_512_1MB(b *testing.B) {
-	checksumTest(b, sha3.New512(), fodder1MB)
-}
-
-func BenchmarkSHA512_224_1MB(b *testing.B) {
-	checksumTest(b, sha512.New512_224(), fodder1MB)
-}
-
-func BenchmarkSHA512_256_1MB(b *testing.B) {
-	checksumTest(b, sha512.New512_256(), fodder1MB)
-}
-
-func BenchmarkAdler32_1MB(b *testing.B) {
-	checksumTest(b, adler32.New(), fodder1MB)
-}
-
-func BenchmarkCRC32IEEE_1MB(b *testing.B) {
-	checksumTest(b, crc32.NewIEEE(), fodder1MB)
-}
-
-func BenchmarkCRC32Castagnoli_1MB(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Castagnoli)), fodder1MB)
-}
-
-func BenchmarkCRC32Koopman_1MB(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Koopman)), fodder1MB)
-}
-
-func BenchmarkCRC64_1MB(b *testing.B) {
-	checksumTest(b, crc64.New(crc64.MakeTable(crc64.ISO)), fodder1MB)
-}
-
-func BenchmarkFNV32_1MB(b *testing.B) {
-	checksumTest(b, fnv.New32(), fodder1MB)
-}
-
-func BenchmarkFNV32a_1MB(b *testing.B) {
-	checksumTest(b, fnv.New32a(), fodder1MB)
-}
-
-func BenchmarkFNV64_1MB(b *testing.B) {
-	checksumTest(b, fnv.New64(), fodder1MB)
-}
-
-func BenchmarkFNV64a_1MB(b *testing.B) {
-	checksumTest(b, fnv.New64a(), fodder1MB)
-}
-
-// 1KB benchmarks
-
-func BenchmarkMD4_1KB(b *testing.B) {
-	checksumTest(b, md4.New(), fodder1KB)
-}
-
-func BenchmarkMD5_1KB(b *testing.B) {
-	checksumTest(b, md5.New(), fodder1KB)
-}
-
-func BenchmarkSHA1_1KB(b *testing.B) {
-	checksumTest(b, sha1.New(), fodder1KB)
-}
-
-func BenchmarkSHA224_1KB(b *testing.B) {
-	checksumTest(b, sha256.New224(), fodder1KB)
-}
-
-func BenchmarkSHA256_1KB(b *testing.B) {
-	checksumTest(b, sha256.New(), fodder1KB)
-}
-
-func BenchmarkSHA384_1KB(b *testing.B) {
-	checksumTest(b, sha512.New384(), fodder1KB)
-}
-
-func BenchmarkSHA512_1KB(b *testing.B) {
-	checksumTest(b, sha512.New(), fodder1KB)
-}
-
-func BenchmarkSHA3_224_1KB(b *testing.B) {
-	checksumTest(b, sha3.New224(), fodder1KB)
-}
-
-func BenchmarkSHA3_256_1KB(b *testing.B) {
-	checksumTest(b, sha3.New256(), fodder1KB)
-}
-
-func BenchmarkSHA3_384_1KB(b *testing.B) {
-	checksumTest(b, sha3.New384(), fodder1KB)
-}
-
-func BenchmarkSHA3_512_1KB(b *testing.B) {
-	checksumTest(b, sha3.New512(), fodder1KB)
-}
-
-func BenchmarkSHA512_224_1KB(b *testing.B) {
-	checksumTest(b, sha512.New512_224(), fodder1KB)
-}
-
-func BenchmarkSHA512_256_1KB(b *testing.B) {
-	checksumTest(b, sha512.New512_256(), fodder1KB)
-}
-
-func BenchmarkAdler32_1KB(b *testing.B) {
-	checksumTest(b, adler32.New(), fodder1KB)
-}
-
-func BenchmarkCRC32IEEE_1KB(b *testing.B) {
-	checksumTest(b, crc32.NewIEEE(), fodder1KB)
-}
-
-func BenchmarkCRC32Castagnoli_1KB(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Castagnoli)), fodder1KB)
-}
-
-func BenchmarkCRC32Koopman_1KB(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Koopman)), fodder1KB)
-}
-
-func BenchmarkCRC64_1KB(b *testing.B) {
-	checksumTest(b, crc64.New(crc64.MakeTable(crc64.ISO)), fodder1KB)
-}
-
-func BenchmarkFNV32_1KB(b *testing.B) {
-	checksumTest(b, fnv.New32(), fodder1KB)
-}
-
-func BenchmarkFNV32a_1KB(b *testing.B) {
-	checksumTest(b, fnv.New32a(), fodder1KB)
-}
-
-func BenchmarkFNV64_1KB(b *testing.B) {
-	checksumTest(b, fnv.New64(), fodder1KB)
-}
-
-func BenchmarkFNV64a_1KB(b *testing.B) {
-	checksumTest(b, fnv.New64a(), fodder1KB)
-}
-
-// 64B benchmarks
-
-func BenchmarkMD4_64B(b *testing.B) {
-	checksumTest(b, md4.New(), fodder64B)
-}
-
-func BenchmarkMD5_64B(b *testing.B) {
-	checksumTest(b, md5.New(), fodder64B)
-}
-
-func BenchmarkSHA1_64B(b *testing.B) {
-	checksumTest(b, sha1.New(), fodder64B)
-}
-
-func BenchmarkSHA224_64B(b *testing.B) {
-	checksumTest(b, sha256.New224(), fodder64B)
-}
-
-func BenchmarkSHA256_64B(b *testing.B) {
-	checksumTest(b, sha256.New(), fodder64B)
-}
-
-func BenchmarkSHA384_64B(b *testing.B) {
-	checksumTest(b, sha512.New384(), fodder64B)
-}
-
-func BenchmarkSHA512_64B(b *testing.B) {
-	checksumTest(b, sha512.New(), fodder64B)
-}
-
-func BenchmarkSHA3_224_64B(b *testing.B) {
-	checksumTest(b, sha3.New224(), fodder64B)
-}
-
-func BenchmarkSHA3_256_64B(b *testing.B) {
-	checksumTest(b, sha3.New256(), fodder64B)
-}
-
-func BenchmarkSHA3_384_64B(b *testing.B) {
-	checksumTest(b, sha3.New384(), fodder64B)
-}
-
-func BenchmarkSHA3_512_64B(b *testing.B) {
-	checksumTest(b, sha3.New512(), fodder64B)
-}
-
-func BenchmarkSHA512_224_64B(b *testing.B) {
-	checksumTest(b, sha512.New512_224(), fodder64B)
-}
-
-func BenchmarkSHA512_256_64B(b *testing.B) {
-	checksumTest(b, sha512.New512_256(), fodder64B)
-}
-
-func BenchmarkAdler32_64B(b *testing.B) {
-	checksumTest(b, adler32.New(), fodder64B)
-}
-
-func BenchmarkCRC32IEEE_64B(b *testing.B) {
-	checksumTest(b, crc32.NewIEEE(), fodder64B)
-}
-
-func BenchmarkCRC32Castagnoli_64B(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Castagnoli)), fodder64B)
-}
-
-func BenchmarkCRC32Koopman_64B(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Koopman)), fodder64B)
-}
-
-func BenchmarkCRC64_64B(b *testing.B) {
-	checksumTest(b, crc64.New(crc64.MakeTable(crc64.ISO)), fodder64B)
-}
-
-func BenchmarkFNV32_64B(b *testing.B) {
-	checksumTest(b, fnv.New32(), fodder64B)
-}
-
-func BenchmarkFNV32a_64B(b *testing.B) {
-	checksumTest(b, fnv.New32a(), fodder64B)
-}
-
-func BenchmarkFNV64_64B(b *testing.B) {
-	checksumTest(b, fnv.New64(), fodder64B)
-}
-
-func BenchmarkFNV64a_64B(b *testing.B) {
-	checksumTest(b, fnv.New64a(), fodder64B)
-}
-
-// 24B benchmarks
-
-func BenchmarkMD4_24B(b *testing.B) {
-	checksumTest(b, md4.New(), fodder24B)
-}
-
-func BenchmarkMD5_24B(b *testing.B) {
-	checksumTest(b, md5.New(), fodder24B)
-}
-
-func BenchmarkSHA1_24B(b *testing.B) {
-	checksumTest(b, sha1.New(), fodder24B)
-}
-
-func BenchmarkSHA224_24B(b *testing.B) {
-	checksumTest(b, sha256.New224(), fodder24B)
-}
-
-func BenchmarkSHA256_24B(b *testing.B) {
-	checksumTest(b, sha256.New(), fodder24B)
-}
-
-func BenchmarkSHA384_24B(b *testing.B) {
-	checksumTest(b, sha512.New384(), fodder24B)
-}
-
-func BenchmarkSHA512_24B(b *testing.B) {
-	checksumTest(b, sha512.New(), fodder24B)
-}
-
-func BenchmarkSHA3_224_24B(b *testing.B) {
-	checksumTest(b, sha3.New224(), fodder24B)
-}
-
-func BenchmarkSHA3_256_24B(b *testing.B) {
-	checksumTest(b, sha3.New256(), fodder24B)
-}
-
-func BenchmarkSHA3_384_24B(b *testing.B) {
-	checksumTest(b, sha3.New384(), fodder24B)
-}
-
-func BenchmarkSHA3_512_24B(b *testing.B) {
-	checksumTest(b, sha3.New512(), fodder24B)
-}
-
-func BenchmarkSHA512_224_24B(b *testing.B) {
-	checksumTest(b, sha512.New512_224(), fodder24B)
+var hashImplementations = []struct {
+	hashName    string
+	hashNewFunc func() hash.Hash
+}{{
+	hashName:    "md4",
+	hashNewFunc: md4.New,
+}, {
+	hashName:    "md5",
+	hashNewFunc: md5.New,
+}, {
+	hashName:    "sha1",
+	hashNewFunc: sha1.New,
+}, {
+	hashName:    "sha224",
+	hashNewFunc: sha256.New224,
+}, {
+	hashName:    "sha256",
+	hashNewFunc: sha256.New,
+}, {
+	hashName:    "sha384",
+	hashNewFunc: sha512.New384,
+}, {
+	hashName:    "sha512",
+	hashNewFunc: sha512.New,
+}, {
+	hashName:    "sha3-224",
+	hashNewFunc: sha3.New224,
+}, {
+	hashName:    "sha3-256",
+	hashNewFunc: sha3.New256,
+}, {
+	hashName:    "sha3-384",
+	hashNewFunc: sha3.New384,
+}, {
+	hashName:    "sha3-512",
+	hashNewFunc: sha3.New512,
+}, {
+	hashName:    "sha512-224",
+	hashNewFunc: sha512.New512_224,
+}, {
+	hashName:    "sha512-256",
+	hashNewFunc: sha512.New512_256,
+}, {
+	hashName:    "adler32",
+	hashNewFunc: func() hash.Hash { return adler32.New() },
+}, {
+	hashName:    "crc32-ieee",
+	hashNewFunc: func() hash.Hash { return crc32.NewIEEE() },
+}, {
+	hashName:    "crc32-castagnoli",
+	hashNewFunc: func() hash.Hash { return crc32.New(crc32.MakeTable(crc32.Castagnoli)) },
+}, {
+	hashName:    "crc32-koopman",
+	hashNewFunc: func() hash.Hash { return crc32.New(crc32.MakeTable(crc32.Koopman)) },
+}, {
+	hashName:    "crc64",
+	hashNewFunc: func() hash.Hash { return crc64.New(crc64.MakeTable(crc64.ISO)) },
+}, {
+	hashName:    "fnv32",
+	hashNewFunc: func() hash.Hash { return fnv.New32() },
+}, {
+	hashName:    "fnv32a",
+	hashNewFunc: func() hash.Hash { return fnv.New32a() },
+}, {
+	hashName:    "fnv64",
+	hashNewFunc: func() hash.Hash { return fnv.New64() },
+}, {
+	hashName:    "fnv64a",
+	hashNewFunc: func() hash.Hash { return fnv.New64a() },
+}, {
+	hashName:    "xxh3",
+	hashNewFunc: func() hash.Hash { return newXXH3Wrapper() },
+}, {
+	hashName:    "xxh3-128",
+	hashNewFunc: func() hash.Hash { return newXXH3128Wrapper() },
+}, {
+	hashName:    "xxhash-cespare",
+	hashNewFunc: func() hash.Hash { return xxhashcespare.New() },
+}, {
+	hashName:    "xxhash-oneofone-32",
+	hashNewFunc: func() hash.Hash { return xxhashoneofone.New32() },
+}, {
+	hashName:    "xxhash-oneofone-64",
+	hashNewFunc: func() hash.Hash { return xxhashoneofone.New64() },
+}, {
+	hashName:    "xxhash-pierrec-32",
+	hashNewFunc: func() hash.Hash { return xxhashpierrec32.New(0xCAFE) },
+}, {
+	hashName:    "xxhash-pierrec-64",
+	hashNewFunc: func() hash.Hash { return xxhashpierrec64.New(0xCAFE) },
+}}
+
+var stringToSize = regexp.MustCompile(`(\d)([KMG]?)B`)
+
+func generateRandomBytes(tb testing.TB, sizeString string) []byte {
+	ss := stringToSize.FindStringSubmatch(sizeString)
+	if len(ss) != 3 {
+		tb.Fatalf("invalid size string %q", ss)
+	}
+	size, err := strconv.Atoi(ss[1])
+	if err != nil {
+		tb.Fatalf("failed to parse integer %q", ss[1])
+	}
+	switch ss[2] {
+	case "G":
+		size *= 1024
+		fallthrough
+	case "M":
+		size *= 1024
+		fallthrough
+	case "K":
+		size *= 1024
+	}
+	s := make([]byte, size, size)
+	_, _ = rand.Read(s)
+	return s
 }
 
-func BenchmarkSHA512_256_24B(b *testing.B) {
-	checksumTest(b, sha512.New512_256(), fodder24B)
+type xxh3Wrapper struct {
+	hash.Hash
+	sum uint64
 }
 
-func BenchmarkAdler32_24B(b *testing.B) {
-	checksumTest(b, adler32.New(), fodder24B)
+func newXXH3Wrapper() hash.Hash {
+	return &xxh3Wrapper{
+		sum: xxh3.Hash(nil),
+	}
 }
 
-func BenchmarkCRC32IEEE_24B(b *testing.B) {
-	checksumTest(b, crc32.NewIEEE(), fodder24B)
+func (x *xxh3Wrapper) Write(p []byte) (n int, err error) {
+	x.sum = xxh3.Hash(p)
+	return len(p), nil
 }
 
-func BenchmarkCRC32Castagnoli_24B(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Castagnoli)), fodder24B)
+func (x *xxh3Wrapper) Sum(b []byte) []byte {
+	if len(b) > 0 {
+		panic("this implementation only handles Sum(nil)")
+	}
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], x.sum)
+	return buf[:]
 }
 
-func BenchmarkCRC32Koopman_24B(b *testing.B) {
-	checksumTest(b, crc32.New(crc32.MakeTable(crc32.Koopman)), fodder24B)
+func (x *xxh3Wrapper) Reset() {
 }
 
-func BenchmarkCRC64_24B(b *testing.B) {
-	checksumTest(b, crc64.New(crc64.MakeTable(crc64.ISO)), fodder24B)
+type xxh3128Wrapper struct {
+	hash.Hash
+	sum [2]uint64
 }
 
-func BenchmarkFNV32_24B(b *testing.B) {
-	checksumTest(b, fnv.New32(), fodder24B)
+func newXXH3128Wrapper() hash.Hash {
+	return &xxh3128Wrapper{
+		sum: xxh3.Hash128(nil),
+	}
 }
 
-func BenchmarkFNV32a_24B(b *testing.B) {
-	checksumTest(b, fnv.New32a(), fodder24B)
+func (x *xxh3128Wrapper) Write(p []byte) (n int, err error) {
+	x.sum = xxh3.Hash128(p)
+	return len(p), nil
 }
 
-func BenchmarkFNV64_24B(b *testing.B) {
-	checksumTest(b, fnv.New64(), fodder24B)
+func (x *xxh3128Wrapper) Sum(b []byte) []byte {
+	if len(b) > 0 {
+		panic("this implementation only handles Sum(nil)")
+	}
+	var buf [16]byte
+	binary.BigEndian.PutUint64(buf[:8], x.sum[0])
+	binary.BigEndian.PutUint64(buf[8:], x.sum[1])
+	return buf[:]
 }
 
-func BenchmarkFNV64a_24B(b *testing.B) {
-	checksumTest(b, fnv.New64a(), fodder24B)
+func (x *xxh3128Wrapper) Reset() {
 }
