@@ -27,11 +27,12 @@ import (
 )
 
 func BenchmarkChecksums(b *testing.B) {
-	for _, size := range []string{"8B", "16B", "32B", "1KB", "16KB", "128KB", "1MB", "16MB"} {
+	for _, size := range []string{"8B", "256B", "8KB", "256KB", "8MB"} {
 		fodder := generateRandomBytes(b, size)
 		for _, hi := range hashImplementations {
 			h := hi.hashNewFunc()
-			b.Run(fmt.Sprintf("%s-%s", hi.hashName, size), func(b *testing.B) {
+			b.Run(fmt.Sprintf("%s-%sytes", hi.hashName, size), func(b *testing.B) {
+				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
 					h.Write(fodder)
 					h.Sum(nil)
