@@ -19,31 +19,49 @@ import (
 
 	xxhashoneofone "github.com/OneOfOne/xxhash"
 	xxhashcespare "github.com/cespare/xxhash/v2"
+	"github.com/dchest/siphash"
 	xxhashpierrec32 "github.com/pierrec/xxHash/xxHash32"
 	xxhashpierrec64 "github.com/pierrec/xxHash/xxHash64"
+	"github.com/zeebo/blake3"
 	"github.com/zeebo/xxh3"
+	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/md4"
 	"golang.org/x/crypto/sha3"
 )
 
-func BenchmarkChecksums(b *testing.B) {
-	for _, size := range []string{"8B", "256B", "8KB", "256KB", "8MB"} {
+func BenchmarkChecksums_Cryptographic(b *testing.B) {
+	for _, size := range []string{"1B", "1KB", "1MB"} {
 		fodder := generateRandomBytes(b, size)
-		for _, hi := range hashImplementations {
-			h := hi.hashNewFunc()
-			b.Run(fmt.Sprintf("%s-%sytes", hi.hashName, size), func(b *testing.B) {
+		for _, hi := range cryptographic {
+			b.Run(fmt.Sprintf("%s-%s", hi.hashName, size), func(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
+					h := hi.hashNewFunc()
 					h.Write(fodder)
 					h.Sum(nil)
-					h.Reset()
 				}
 			})
 		}
 	}
 }
 
-var hashImplementations = []struct {
+func BenchmarkChecksums_NonCryptographic(b *testing.B) {
+	for _, size := range []string{"1B", "1KB", "1MB"} {
+		fodder := generateRandomBytes(b, size)
+		for _, hi := range nonCryptographic {
+			b.Run(fmt.Sprintf("%s-%s", hi.hashName, size), func(b *testing.B) {
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					h := hi.hashNewFunc()
+					h.Write(fodder)
+					h.Sum(nil)
+				}
+			})
+		}
+	}
+}
+
+var cryptographic = []struct {
 	hashName    string
 	hashNewFunc func() hash.Hash
 }{{
@@ -56,26 +74,14 @@ var hashImplementations = []struct {
 	hashName:    "sha1",
 	hashNewFunc: sha1.New,
 }, {
-	hashName:    "sha224",
-	hashNewFunc: sha256.New224,
-}, {
 	hashName:    "sha256",
 	hashNewFunc: sha256.New,
-}, {
-	hashName:    "sha384",
-	hashNewFunc: sha512.New384,
 }, {
 	hashName:    "sha512",
 	hashNewFunc: sha512.New,
 }, {
-	hashName:    "sha3-224",
-	hashNewFunc: sha3.New224,
-}, {
 	hashName:    "sha3-256",
 	hashNewFunc: sha3.New256,
-}, {
-	hashName:    "sha3-384",
-	hashNewFunc: sha3.New384,
 }, {
 	hashName:    "sha3-512",
 	hashNewFunc: sha3.New512,
@@ -86,6 +92,31 @@ var hashImplementations = []struct {
 	hashName:    "sha512-256",
 	hashNewFunc: sha512.New512_256,
 }, {
+	hashName:    "siphash",
+	hashNewFunc: func() hash.Hash { return siphash.New(make([]byte, 16)) },
+}, {
+	hashName: "blake2b-256",
+	hashNewFunc: func() hash.Hash {
+		h, _ := blake2b.New256(nil)
+		return h
+	},
+}, {
+	hashName: "blake2b-512",
+	hashNewFunc: func() hash.Hash {
+		h, _ := blake2b.New512(nil)
+		return h
+	},
+}, {
+	hashName: "blake3",
+	hashNewFunc: func() hash.Hash {
+		return blake3.New()
+	},
+}}
+
+var nonCryptographic = []struct {
+	hashName    string
+	hashNewFunc func() hash.Hash
+}{{
 	hashName:    "adler32",
 	hashNewFunc: func() hash.Hash { return adler32.New() },
 }, {
@@ -112,6 +143,12 @@ var hashImplementations = []struct {
 }, {
 	hashName:    "fnv64a",
 	hashNewFunc: func() hash.Hash { return fnv.New64a() },
+}, {
+	hashName:    "fnv128",
+	hashNewFunc: func() hash.Hash { return fnv.New128() },
+}, {
+	hashName:    "fnv128a",
+	hashNewFunc: func() hash.Hash { return fnv.New128a() },
 }, {
 	hashName:    "xxh3",
 	hashNewFunc: func() hash.Hash { return newXXH3Wrapper() },
@@ -191,7 +228,7 @@ func (x *xxh3Wrapper) Reset() {
 
 type xxh3128Wrapper struct {
 	hash.Hash
-	sum [2]uint64
+	sum xxh3.Uint128
 }
 
 func newXXH3128Wrapper() hash.Hash {
@@ -209,9 +246,7 @@ func (x *xxh3128Wrapper) Sum(b []byte) []byte {
 	if len(b) > 0 {
 		panic("this implementation only handles Sum(nil)")
 	}
-	var buf [16]byte
-	binary.BigEndian.PutUint64(buf[:8], x.sum[0])
-	binary.BigEndian.PutUint64(buf[8:], x.sum[1])
+	buf := x.sum.Bytes()
 	return buf[:]
 }
 
