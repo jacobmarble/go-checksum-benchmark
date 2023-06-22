@@ -7,6 +7,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/dchest/siphash v1.2.3
 	github.com/pierrec/xxHash v0.1.5
+	github.com/spaolacci/murmur3 v1.1.0
 	github.com/zeebo/blake3 v0.2.3
 	github.com/zeebo/xxh3 v1.0.2
 	golang.org/x/crypto v0.9.0

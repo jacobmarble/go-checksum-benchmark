@@ -22,6 +22,7 @@ import (
 	"github.com/dchest/siphash"
 	xxhashpierrec32 "github.com/pierrec/xxHash/xxHash32"
 	xxhashpierrec64 "github.com/pierrec/xxHash/xxHash64"
+	"github.com/spaolacci/murmur3"
 	"github.com/zeebo/blake3"
 	"github.com/zeebo/xxh3"
 	"golang.org/x/crypto/blake2b"
@@ -29,36 +30,44 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-func BenchmarkChecksums_Cryptographic(b *testing.B) {
-	for _, size := range []string{"1B", "1KB", "1MB"} {
-		fodder := generateRandomBytes(b, size)
-		for _, hi := range cryptographic {
-			b.Run(fmt.Sprintf("%s-%s", hi.hashName, size), func(b *testing.B) {
-				b.ReportAllocs()
-				for i := 0; i < b.N; i++ {
-					h := hi.hashNewFunc()
-					h.Write(fodder)
-					h.Sum(nil)
-				}
-			})
-		}
+func BenchmarkChecksums(b *testing.B) {
+	sizes := []string{"1B", "1KB", "1MB"}
+	fodderBySize := map[string][]byte{}
+	for _, size := range sizes {
+		fodderBySize[size] = generateRandomBytes(b, size)
 	}
-}
 
-func BenchmarkChecksums_NonCryptographic(b *testing.B) {
-	for _, size := range []string{"1B", "1KB", "1MB"} {
-		fodder := generateRandomBytes(b, size)
-		for _, hi := range nonCryptographic {
-			b.Run(fmt.Sprintf("%s-%s", hi.hashName, size), func(b *testing.B) {
-				b.ReportAllocs()
-				for i := 0; i < b.N; i++ {
-					h := hi.hashNewFunc()
-					h.Write(fodder)
-					h.Sum(nil)
-				}
-			})
+	b.Run("cryptographic", func(b *testing.B) {
+		for _, size := range sizes {
+			fodder := fodderBySize[size]
+			for _, hi := range cryptographic {
+				b.Run(fmt.Sprintf("%s-%s", hi.hashName, size), func(b *testing.B) {
+					b.ReportAllocs()
+					for i := 0; i < b.N; i++ {
+						h := hi.hashNewFunc()
+						h.Write(fodder)
+						h.Sum(nil)
+					}
+				})
+			}
 		}
-	}
+	})
+
+	b.Run("non-cryptographic", func(b *testing.B) {
+		for _, size := range sizes {
+			fodder := generateRandomBytes(b, size)
+			for _, hi := range nonCryptographic {
+				b.Run(fmt.Sprintf("%s-%s", hi.hashName, size), func(b *testing.B) {
+					b.ReportAllocs()
+					for i := 0; i < b.N; i++ {
+						h := hi.hashNewFunc()
+						h.Write(fodder)
+						h.Sum(nil)
+					}
+				})
+			}
+		}
+	})
 }
 
 var cryptographic = []struct {
@@ -149,6 +158,12 @@ var nonCryptographic = []struct {
 }, {
 	hashName:    "fnv128a",
 	hashNewFunc: func() hash.Hash { return fnv.New128a() },
+}, {
+	hashName:    "murmur3-32",
+	hashNewFunc: func() hash.Hash { return murmur3.New32() },
+}, {
+	hashName:    "murmur3-128",
+	hashNewFunc: func() hash.Hash { return murmur3.New128() },
 }, {
 	hashName:    "xxh3",
 	hashNewFunc: func() hash.Hash { return newXXH3Wrapper() },
